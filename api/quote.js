@@ -9,6 +9,27 @@ const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN;
 const BASE_ID = process.env.AIRTABLE_BASE_ID;
 const TABLE = process.env.AIRTABLE_TABLE || 'Quotes';
 
+// Email (Resend) — optional. When RESEND_API_KEY is set, the function emails Juan + the customer on each quote.
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const FROM_EMAIL = process.env.QUOTE_FROM_EMAIL || 'Juan Knife Sharpening <quotes@juanknifesharpening.com>';
+const NOTIFY_EMAIL = process.env.QUOTE_NOTIFY_EMAIL || 'juan@juanknifesharpening.com';
+
+async function sendEmail(to, subject, text) {
+  if (!RESEND_API_KEY || !to) return;
+  try {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + RESEND_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ from: FROM_EMAIL, to: [to], subject: subject, text: text }),
+    });
+  } catch (e) {
+    // best-effort: never fail the request because an email didn't send
+  }
+}
+
 function airtable(path, options) {
   return fetch(
     'https://api.airtable.com/v0/' + BASE_ID + '/' + encodeURIComponent(TABLE) + path,
@@ -56,6 +77,33 @@ module.exports = async (req, res) => {
         res.status(r.status).json({ error: 'save_failed', airtableStatus: r.status, detail: txt });
         return;
       }
+
+      // Fire off notification + confirmation emails (best-effort; won't block or fail the save).
+      const num = String(b.number || '');
+      const juanBody =
+        'New sharpening quote request:\n\n' +
+        'Quote #: ' + num + '\n' +
+        'Name: ' + fields.Name + '\n' +
+        'Email: ' + fields.Email + '\n' +
+        'Phone: ' + fields.Phone + '\n' +
+        'Knives: ' + fields.Knives + '\n' +
+        'Estimated total: ' + fields.Estimate + '\n' +
+        'Preferred dates: ' + fields.Dates + '\n';
+      const custBody =
+        'Hi ' + (fields.Name || 'there') + ',\n\n' +
+        'Thanks for your request! Here is your quote:\n\n' +
+        'Quote #: ' + num + '\n' +
+        'Knives: ' + fields.Knives + '\n' +
+        'Estimated total: ' + fields.Estimate + '\n' +
+        'Your preferred dates: ' + fields.Dates + '\n\n' +
+        'Juan will reach out to confirm one of your dates. You can check your quote status anytime at ' +
+        'https://www.juanknifesharpening.com using your quote number.\n\n' +
+        '— Juan Knife Sharpening\n(872) 237-1005';
+      await Promise.all([
+        sendEmail(NOTIFY_EMAIL, 'New quote request ' + num, juanBody),
+        sendEmail(fields.Email, 'Your Juan Knife Sharpening quote ' + num, custBody),
+      ]);
+
       res.status(200).json({ ok: true, number: b.number });
       return;
     }
