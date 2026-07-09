@@ -36,7 +36,8 @@ module.exports = async (req, res) => {
       const fields = {
         'Quote #': String(b.number || ''),
         Name: String(b.name || ''),
-        Contact: String(b.contact || ''),
+        Email: String(b.email || ''),
+        Phone: String(b.phone || ''),
         Knives: String(b.knives || ''),
         Estimate: String(b.estimate || ''),
         Dates: String(b.dates || ''),
