@@ -14,16 +14,18 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_EMAIL = process.env.QUOTE_FROM_EMAIL || 'Juan Knife Sharpening <quotes@juanknifesharpening.com>';
 const NOTIFY_EMAIL = process.env.QUOTE_NOTIFY_EMAIL || 'juan@juanknifesharpening.com';
 
-async function sendEmail(to, subject, text) {
+async function sendEmail(to, subject, text, attachments) {
   if (!RESEND_API_KEY || !to) return;
   try {
+    const payload = { from: FROM_EMAIL, to: [to], subject: subject, text: text };
+    if (attachments && attachments.length) payload.attachments = attachments;
     await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
         Authorization: 'Bearer ' + RESEND_API_KEY,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ from: FROM_EMAIL, to: [to], subject: subject, text: text }),
+      body: JSON.stringify(payload),
     });
   } catch (e) {
     // best-effort: never fail the request because an email didn't send
@@ -99,9 +101,12 @@ module.exports = async (req, res) => {
         'Juan will reach out to confirm one of your dates. You can check your quote status anytime at ' +
         'https://www.juanknifesharpening.com using your quote number.\n\n' +
         '— Juan Knife Sharpening\n(872) 237-1005';
+      const attachments = [];
+      if (b.beforeImage) attachments.push({ filename: 'before.jpg', content: String(b.beforeImage) });
+      if (b.afterImage) attachments.push({ filename: 'after.jpg', content: String(b.afterImage) });
       await Promise.all([
-        sendEmail(NOTIFY_EMAIL, 'New quote request ' + num, juanBody),
-        sendEmail(fields.Email, 'Your Juan Knife Sharpening quote ' + num, custBody),
+        sendEmail(NOTIFY_EMAIL, 'New quote request ' + num, juanBody, attachments),
+        sendEmail(fields.Email, 'Your Juan Knife Sharpening quote ' + num, custBody, attachments),
       ]);
 
       res.status(200).json({ ok: true, number: b.number });
