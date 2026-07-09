@@ -32,7 +32,11 @@ module.exports = async (req, res) => {
 
   try {
     if (req.method === 'POST') {
-      const b = req.body || {};
+      let b = req.body;
+      if (typeof b === 'string') {
+        try { b = JSON.parse(b); } catch (e) { b = {}; }
+      }
+      if (!b || typeof b !== 'object') b = {};
       const fields = {
         'Quote #': String(b.number || ''),
         Name: String(b.name || ''),
@@ -47,8 +51,9 @@ module.exports = async (req, res) => {
         method: 'POST',
         body: JSON.stringify({ fields: fields, typecast: true }),
       });
+      const txt = await r.text();
       if (!r.ok) {
-        res.status(500).json({ error: 'save_failed', detail: await r.text() });
+        res.status(r.status).json({ error: 'save_failed', airtableStatus: r.status, detail: txt });
         return;
       }
       res.status(200).json({ ok: true, number: b.number });
